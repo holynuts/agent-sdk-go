@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Ingenimax/agent-sdk-go/pkg/agent"
 	"github.com/Ingenimax/agent-sdk-go/pkg/config"
 	"github.com/Ingenimax/agent-sdk-go/pkg/interfaces"
 	"github.com/Ingenimax/agent-sdk-go/pkg/llm/openai"
+	"github.com/Ingenimax/agent-sdk-go/pkg/multitenancy"
+	"github.com/surrealdb/surrealdb.go"
 
-	surrealdb_datastore "github.com/Ingenimax/agent-sdk-go/pkg/datastore/surrealdb"
+	surrealdb_client "github.com/Ingenimax/agent-sdk-go/pkg/datastore/surrealdb"
 	surrealdb_memory "github.com/Ingenimax/agent-sdk-go/pkg/memory"
 	surrealdb_vectorstore "github.com/Ingenimax/agent-sdk-go/pkg/vectorstore/surrealdb"
 )
@@ -46,16 +47,22 @@ func main() {
 	}
 
 	fmt.Printf("Connecting to SurrealDB at %s...\n", cfg.URL)
-	db, err := surrealdb_datastore.New(cfg)
+	db, err := surrealdb_client.New(cfg)
 	if err != nil {
 		fmt.Printf("Failed to connect to SurrealDB: %v\n", err)
 		os.Exit(1)
 	}
-	// The driver does not have an explicit Close method in this version.
-	// defer db.Close(context.Background())
 	fmt.Println("Successfully connected to SurrealDB.")
 
-	// 2. Instantiate components
+	// 2. Apply database schema
+	err = applySchema(ctx, db, "examples/surrealdb_agent/schema.surql")
+	if err != nil {
+		fmt.Printf("Failed to apply database schema: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("Successfully applied database schema.")
+
+	// 3. Instantiate components
 	mockEmbedder := &MockEmbedder{}
 
 	llm := openai.NewClient(os.Getenv("OPENAI_API_KEY"))
@@ -65,23 +72,8 @@ func main() {
 		surrealdb_memory.WithSurrealDBSummarization(llm, 5, 2),
 	)
 
-	// 3. Use the components in an agent
-	exampleAgent, err := agent.NewAgent(
-		agent.WithName("surrealdb-example-agent"),
-		agent.WithDescription("An agent demonstrating SurrealDB integration."),
-		agent.WithLLM(llm),
-		agent.WithMemory(memory),
-		// Note: The DataStore is not a direct property of the agent itself,
-		// but is used by components like memory or other tools.
-		// We don't pass it to the agent constructor.
-	)
-	if err != nil {
-		fmt.Printf("Failed to create agent: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("\n--- Running Example Agent: %s ---\n", exampleAgent.GetName())
-
+	// 4. Use the components
+	ctx = multitenancy.WithOrgID(ctx, "example-org")
 	ctx = context.WithValue(ctx, surrealdb_memory.ConversationIDKey, "convo-123")
 
 	fmt.Println("\nAdding messages to memory...")
@@ -110,7 +102,10 @@ func main() {
 		Metadata: map[string]interface{}{"source": "example"},
 	}
 
-	err = vectorStore.Store(ctx, []interfaces.Document{doc})
+	storeOpts := []interfaces.StoreOption{
+		interfaces.WithGenerateVectors(true),
+	}
+	err = vectorStore.Store(ctx, []interfaces.Document{doc}, storeOpts...)
 	if err != nil {
 		fmt.Printf("Failed to store document: %v\n", err)
 	} else {
@@ -134,4 +129,28 @@ func getEnv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func applySchema(ctx context.Context, db *surrealdb.DB, filepath string) error {
+	schema, err := os.ReadFile(filepath)
+	if err != nil {
+		return fmt.Errorf("failed to read schema file: %w", err)
+	}
+
+	if len(schema) == 0 {
+		return nil // Nothing to apply
+	}
+
+	queryResult, err := surrealdb.Query[any](ctx, db, string(schema), nil)
+	if err != nil {
+		return err
+	}
+
+	for _, res := range *queryResult {
+		if res.Error != nil {
+			return fmt.Errorf("schema query failed: %s", res.Error.Message)
+		}
+	}
+
+	return nil
 }
