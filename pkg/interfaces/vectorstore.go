@@ -144,9 +144,23 @@ func WithGenerateVectors(generate bool) StoreOption {
 	}
 }
 
-// WithClass sets the class/collection name
+// WithClass sets the class/collection name for store operations
 func WithClass(class string) StoreOption {
 	return func(o *StoreOptions) {
+		o.Class = class
+	}
+}
+
+// WithClassSearch sets the class/collection name for search operations
+func WithClassSearch(class string) SearchOption {
+	return func(o *SearchOptions) {
+		o.Class = class
+	}
+}
+
+// WithClassDelete sets the class/collection name for delete operations
+func WithClassDelete(class string) DeleteOption {
+	return func(o *DeleteOptions) {
 		o.Class = class
 	}
 }

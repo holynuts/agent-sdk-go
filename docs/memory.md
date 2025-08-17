@@ -45,6 +45,35 @@ mem := redis.New(
 )
 ```
 
+### SurrealDB Memory
+
+Stores messages in SurrealDB for persistence and supports automatic conversation summarization.
+
+```go
+import (
+    "github.com/Ingenimax/agent-sdk-go/pkg/config"
+    surrealdb_client "github.com/Ingenimax/agent-sdk-go/pkg/datastore/surrealdb"
+    "github.com/Ingenimax/agent-sdk-go/pkg/memory"
+)
+
+// Configure and connect to SurrealDB
+cfg := &config.SurrealDBConfig{
+    URL:      "ws://localhost:8000/rpc",
+    Username: "root",
+    Password: "root",
+    NS:       "test",
+    DB:       "test",
+}
+db, err := surrealdb_client.New(cfg)
+// handle error
+
+// Create a SurrealDB memory
+// Summarization is optional
+mem := memory.NewSurrealDBMemory(db,
+    memory.WithSurrealDBSummarization(llmClient, 50, 5),
+)
+```
+
 ## Using Memory with an Agent
 
 To use memory with an agent, pass it to the `WithMemory` option:

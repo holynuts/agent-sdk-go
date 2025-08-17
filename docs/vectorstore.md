@@ -46,6 +46,33 @@ store := pinecone.New(
 )
 ```
 
+### SurrealDB
+
+A unified backend that can serve as a vector store.
+
+```go
+import (
+    "github.com/Ingenimax/agent-sdk-go/pkg/config"
+    surrealdb_client "github.com/Ingenimax/agent-sdk-go/pkg/datastore/surrealdb"
+    "github.com/Ingenimax/agent-sdk-go/pkg/vectorstore/surrealdb"
+)
+
+// Configure and connect to SurrealDB
+cfg := &config.SurrealDBConfig{
+    URL:      "ws://localhost:8000/rpc",
+    Username: "root",
+    Password: "root",
+    NS:       "test",
+    DB:       "test",
+}
+db, err := surrealdb_client.New(cfg)
+// handle error
+
+// Create a SurrealDB vector store
+// An embedder is required for text-based search.
+vectorStore := surrealdb.New(db, embedder)
+```
+
 ## Using Vector Stores
 
 ### Adding Documents
